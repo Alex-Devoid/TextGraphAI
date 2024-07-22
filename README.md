@@ -1,4 +1,4 @@
-# journalistic Entity Extraction
+# Journalist Entity Extraction
 
 This project is a Python package designed to build a knowledge graph from entity extraction of various source documents like transcripts, house bills, PDFs, and other similar documents.
 
@@ -15,17 +15,17 @@ This project is a Python package designed to build a knowledge graph from entity
 To install the package, you can use `pip`:
 
 ```sh
-pip install git+https://github.com/Alex-Devoid/TEXTGRAPHAI.git
+pip install git+https://github.com/yourusername/TEXTGRAPHAI.git
 ```
 
 ## Running the Application
 
 ### Option 1: Using Docker
 
-1. **Navigate to the `journalistic-entity-extraction` directory**:
+1. **Navigate to the `journalist-entity-extraction` directory**:
 
 ```sh
-cd journalistic-entity-extraction
+cd journalist-entity-extraction
 ```
 
 2. **Start the Services**:
@@ -40,10 +40,10 @@ Open your web browser and go to `http://localhost:8000` to access the FastAPI ap
 
 ### Option 2: Local Setup
 
-1. **Navigate to the `journalistic-entity-extraction` directory**:
+1. **Navigate to the `journalist-entity-extraction` directory**:
 
 ```sh
-cd journalistic-entity-extraction
+cd journalist-entity-extraction
 ```
 
 2. **Install Dependencies**:
@@ -54,10 +54,10 @@ pip install -r requirements.txt
 
 3. **Set Up Environment Variables**:
 
-Create a `.env` file in the `journalistic-entity-extraction` directory with the following content:
+Create a `.env` file in the `journalist-entity-extraction` directory with the following content:
 
 ```plaintext
-DATABASE_URL=postgresql://user:password@localhost:5432/journalistic
+DATABASE_URL=postgresql://user:password@localhost:5432/journalist
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=test
@@ -72,15 +72,15 @@ Ensure you have PostgreSQL and Neo4j running locally. You can download and insta
 Run the following commands to initialize the PostgreSQL database:
 
 ```sh
-psql -U user -d journalistic -c "CREATE TABLE users (id SERIAL PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, hashed_password VARCHAR(100) NOT NULL);"
-psql -U user -d journalistic -c "CREATE TABLE projects (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, owner_id INTEGER REFERENCES users(id));"
-psql -U user -d journalistic -c "CREATE TABLE documents (id SERIAL PRIMARY KEY, filename VARCHAR(100) NOT NULL, path VARCHAR(200) NOT NULL, project_id INTEGER REFERENCES projects(id));"
+psql -U user -d journalist -c "CREATE TABLE users (id SERIAL PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, hashed_password VARCHAR(100) NOT NULL);"
+psql -U user -d journalist -c "CREATE TABLE projects (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, owner_id INTEGER REFERENCES users(id));"
+psql -U user -d journalist -c "CREATE TABLE documents (id SERIAL PRIMARY KEY, filename VARCHAR(100) NOT NULL, path VARCHAR(200) NOT NULL, project_id INTEGER REFERENCES projects(id));"
 ```
 
 6. **Start the FastAPI Application**:
 
 ```sh
-uvicorn journalistic_entity_extraction.main:app --reload
+uvicorn journalist_entity_extraction.main:app --reload
 ```
 
 7. **Access the Application**:
@@ -159,11 +159,12 @@ Introduced by: Senator John Doe
 
 ```
 TEXTGRAPHAI/
-├── journalistic-entity-extraction/
+├── .gitignore
+├── README.md
+├── journalist-entity-extraction/
 │   ├── Dockerfile
-│   ├── README.md
 │   ├── docker-compose.yml
-│   ├── journalistic_entity_extraction/
+│   ├── journalist_entity_extraction/
 │   │   ├── __init__.py
 │   │   ├── crud.py
 │   │   ├── database.py
@@ -183,7 +184,6 @@ TEXTGRAPHAI/
 │   └── tests/
 │       ├── __init__.py
 │       └── test_main.py
-├── .gitignore
 └── setup_repo.sh
 ```
 
