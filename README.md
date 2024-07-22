@@ -1,4 +1,4 @@
-# journalistic Entity Extraction
+# Journalistic Entity Extraction
 
 This project is a Python package designed to build a knowledge graph from entity extraction of various source documents like transcripts, house bills, PDFs, and other similar documents.
 
@@ -127,49 +127,6 @@ Go to the entity extraction section, select your project, and click on the "Extr
 
 Access Neo4j at `http://localhost:7474` with the default credentials (`neo4j/test`) to visualize the knowledge graph. You can run queries to explore the relationships between the extracted entities.
 
-### Example with Hypothetical Transcript and House Bill PDF
-
-Follow these steps to create a knowledge graph using automated entity extraction from a hypothetical transcript and a PDF of a house bill.
-
-1. **Register a New User**:
-
-Go to the registration section in the web interface and create a new user.
-
-2. **Create a New Project**:
-
-Go to the project creation section and create a new project with a name of your choice.
-
-3. **Upload Documents**:
-
-- **Transcript**: Upload a text file containing the transcript.
-- **House Bill PDF**: Upload a PDF file of the house bill.
-
-4. **Extract Entities and Build Knowledge Graph**:
-
-Go to the entity extraction section, select your project, and click on the "Extract" button. The application will process the documents, extract entities, and build a knowledge graph.
-
-5. **View Knowledge Graph**:
-
-Access Neo4j at `http://localhost:7474` with the default credentials (`neo4j/test`) to visualize the knowledge graph. You can run queries to explore the relationships between the extracted entities.
-
-### Sample Data
-
-You can use the following sample data for testing:
-
-**Hypothetical Transcript (transcript.txt)**:
-```
-Today, we are gathered here to discuss the new house bill introduced by Senator John Doe. The bill focuses on environmental conservation and renewable energy resources.
-```
-
-**House Bill PDF (house_bill.pdf)**:
-```
-HOUSE BILL NO. 1234
-
-An Act to promote renewable energy and environmental conservation.
-
-Introduced by: Senator John Doe
-```
-
 ### Sample Workflow
 
 1. **Register a User**:
@@ -180,8 +137,8 @@ Introduced by: Senator John Doe
     - Project Name: `Environmental Bill Analysis`
 
 3. **Upload Documents**:
-    - Upload `transcript.txt`
-    - Upload `house_bill.pdf`
+    - Upload `full_transcript.txt`
+    - Upload `BILLS-118hr5863rfs.pdf`
 
 4. **Extract Entities and Build Knowledge Graph**:
     - Select the project `Environmental Bill Analysis`
