@@ -87,7 +87,45 @@ uvicorn journalistic_entity_extraction.main:app --reload
 
 Open your web browser and go to `http://localhost:8000` to access the FastAPI application.
 
-## Usage
+## Using Sample Data
+
+### Download Sample Data
+
+To download the sample transcript, run the following script:
+
+```sh
+cd journalistic-entity-extraction/sample_data
+python download_transcript.py
+```
+
+This will download the full transcript from the specified URL and save it as `full_transcript.txt`.
+
+### Sample House Bill PDF
+
+A sample PDF file named `sample_house_bill.pdf` is also provided in the `sample_data` directory.
+
+### Using the Sample Data
+
+1. **Register a New User**:
+
+Go to the registration section in the web interface and create a new user.
+
+2. **Create a New Project**:
+
+Go to the project creation section and create a new project with a name of your choice.
+
+3. **Upload Documents**:
+
+- **Transcript**: Upload `sample_data/full_transcript.txt`.
+- **House Bill PDF**: Upload `sample_data/BILLS-118hr5863rfs.pdf`.
+
+4. **Extract Entities and Build Knowledge Graph**:
+
+Go to the entity extraction section, select your project, and click on the "Extract" button. The application will process the documents, extract entities, and build a knowledge graph.
+
+5. **View Knowledge Graph**:
+
+Access Neo4j at `http://localhost:7474` with the default credentials (`neo4j/test`) to visualize the knowledge graph. You can run queries to explore the relationships between the extracted entities.
 
 ### Example with Hypothetical Transcript and House Bill PDF
 
@@ -176,6 +214,10 @@ TEXTGRAPHAI/
 │   │       ├── entity_extraction.py
 │   │       └── knowledge_graph.py
 │   ├── requirements.txt
+│   ├── sample_data/
+│   │   ├── BILLS-118hr5863rfs.pdf
+│   │   ├── download_transcript.py
+│   │   └── full_transcript.txt
 │   ├── setup.py
 │   ├── static/
 │   │   └── main.js
