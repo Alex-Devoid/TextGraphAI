@@ -6,4 +6,4 @@ env/
 venv/
 *.sqlite3
 .DS_Store
-.setup_repo.sh
+setup_repo.sh
