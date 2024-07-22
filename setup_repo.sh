@@ -323,7 +323,7 @@ This project is a Python package designed to build a knowledge graph from entity
 To install the package, you can use \`pip\`:
 
 \`\`\`sh
-pip install git+https://github.com/yourusername/TEXTGRAPHAI.git
+pip install git+https://github.com/Alex-Devoid/TEXTGRAPHAI.git
 \`\`\`
 
 ## Running the Application
