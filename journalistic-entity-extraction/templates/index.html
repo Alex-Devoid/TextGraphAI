@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>journalistic Tool</title>
+</head>
+<body>
+    <h1>journalistic Tool</h1>
+    <div>
+        <h2>Register</h2>
+        <form id="register-form">
+            <label>Username:</label>
+            <input type="text" id="username">
+            <label>Password:</label>
+            <input type="password" id="password">
+            <button type="submit">Register</button>
+        </form>
+    </div>
+    <div>
+        <h2>Create Project</h2>
+        <form id="project-form">
+            <label>Project Name:</label>
+            <input type="text" id="project-name">
+            <button type="submit">Create</button>
+        </form>
+    </div>
+    <div>
+        <h2>Upload Document</h2>
+        <form id="upload-form">
+            <label>Project ID:</label>
+            <input type="text" id="project-id">
+            <label>Document:</label>
+            <input type="file" id="document">
+            <button type="submit">Upload</button>
+        </form>
+    </div>
+    <div>
+        <h2>Extract Entities</h2>
+        <form id="extract-form">
+            <label>Project ID:</label>
+            <input type="text" id="extract-project-id">
+            <button type="submit">Extract</button>
+        </form>
+        <pre id="entities-output"></pre>
+    </div>
+    <script src="../static/main.js"></script>
+</body>
+</html>
