@@ -10,17 +10,9 @@ This project is a Python package designed to build a knowledge graph from entity
 - Entity Extraction from Documents
 - Knowledge Graph Construction with Neo4j
 
-## Installation
-
-To install the package, you can use `pip`:
-
-```sh
-pip install git+https://github.com/Alex-Devoid/TEXTGRAPHAI.git
-```
-
 ## Running the Application
 
-### Option 1: Using Docker
+### Option 1: Using Docker (Recommended)
 
 1. **Navigate to the `journalistic-entity-extraction` directory**:
 
