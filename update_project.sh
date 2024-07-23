@@ -1,3 +1,61 @@
+#!/bin/bash
+
+# Create retrieval.py
+cat > journalistic-entity-extraction/journalistic_entity_extraction/services/retrieval.py <<EOL
+from py2neo import Graph
+
+def retrieve_relevant_information(graph: Graph, query: str):
+    cypher_query = """
+    MATCH (n)
+    WHERE n.name CONTAINS $query
+    RETURN n
+    """
+    results = graph.run(cypher_query, query=query).data()
+    return results
+EOL
+
+# Create rag.py
+cat > journalistic-entity-extraction/journalistic_entity_extraction/services/rag.py <<EOL
+import openai
+import os
+from .retrieval import retrieve_relevant_information
+
+def generate_response(graph: Graph, user_query: str):
+    # Retrieve relevant information from the knowledge graph
+    relevant_info = retrieve_relevant_information(graph, user_query)
+    
+    # Convert relevant information to a string format
+    context = " ".join([str(info['n']) for info in relevant_info])
+    
+    # Use OpenAI API to generate a response
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    response = openai.Completion.create(
+        engine="davinci",
+        prompt=f"Context: {context}\n\nUser Query: {user_query}\n\nResponse:",
+        max_tokens=150
+    )
+    return response.choices[0].text
+EOL
+
+# Update main.py to add the new RAG endpoint
+sed -i '' '/from \.schemas import/a\
+from \.services\.rag import generate_response\
+' journalistic-entity-extraction/journalistic_entity_extraction/main.py
+
+# Add the new RAG endpoint to main.py
+awk '/def create_project/,/^@app.post/ { print $0 } END { print "@app.post(\"/rag/\")\nasync def rag_endpoint(user_query: str, graph: Graph = Depends(get_neo4j)):\n    response = generate_response(graph, user_query)\n    return {\"response\": response}\n" }' journalistic-entity-extraction/journalistic_entity_extraction/main.py > temp.py && mv temp.py journalistic-entity-extraction/journalistic_entity_extraction/main.py
+
+# Create or update .env file
+cat > journalistic-entity-extraction/.env <<EOL
+OPENAI_API_KEY=your_openai_api_key_here
+DATABASE_URL=postgresql://user:password@localhost:5432/journalistic
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=test
+EOL
+
+# Update README.md
+cat > README.md <<EOL
 # Journalistic Entity Extraction
 
 This project is a Python package designed to build a knowledge graph from entity extraction of various source documents like transcripts, house bills, PDFs, and other similar documents.
@@ -15,47 +73,47 @@ This project is a Python package designed to build a knowledge graph from entity
 
 ### Option 1: Using Docker (Recommended)
 
-1. **Navigate to the `journalistic-entity-extraction` directory**:
+1. **Navigate to the \`journalistic-entity-extraction\` directory**:
 
-```sh
+\`\`\`sh
 cd journalistic-entity-extraction
-```
+\`\`\`
 
 2. **Start the Services**:
 
-```sh
+\`\`\`sh
 docker-compose up --build
-```
+\`\`\`
 
 3. **Access the Application**:
 
-Open your web browser and go to `http://localhost:8000` to access the FastAPI application. Neo4j will be accessible at `http://localhost:7474` with the default credentials `neo4j/test`.
+Open your web browser and go to \`http://localhost:8000\` to access the FastAPI application. Neo4j will be accessible at \`http://localhost:7474\` with the default credentials \`neo4j/test\`.
 
 ### Option 2: Local Setup
 
-1. **Navigate to the `journalistic-entity-extraction` directory**:
+1. **Navigate to the \`journalistic-entity-extraction\` directory**:
 
-```sh
+\`\`\`sh
 cd journalistic-entity-extraction
-```
+\`\`\`
 
 2. **Install Dependencies**:
 
-```sh
+\`\`\`sh
 pip install -r requirements.txt
-```
+\`\`\`
 
 3. **Set Up Environment Variables**:
 
-Create a `.env` file in the `journalistic-entity-extraction` directory with the following content:
+Create a \`.env\` file in the \`journalistic-entity-extraction\` directory with the following content:
 
-```plaintext
+\`\`\`plaintext
 DATABASE_URL=postgresql://user:password@localhost:5432/journalistic
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=test
 OPENAI_API_KEY=your_openai_api_key_here
-```
+\`\`\`
 
 4. **Run PostgreSQL and Neo4j Locally**:
 
@@ -65,21 +123,21 @@ Ensure you have PostgreSQL and Neo4j running locally. You can download and insta
 
 Run the following commands to initialize the PostgreSQL database:
 
-```sh
+\`\`\`sh
 psql -U user -d journalistic -c "CREATE TABLE users (id SERIAL PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, hashed_password VARCHAR(100) NOT NULL);"
 psql -U user -d journalistic -c "CREATE TABLE projects (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, owner_id INTEGER REFERENCES users(id));"
 psql -U user -d journalistic -c "CREATE TABLE documents (id SERIAL PRIMARY KEY, filename VARCHAR(100) NOT NULL, path VARCHAR(200) NOT NULL, project_id INTEGER REFERENCES projects(id));"
-```
+\`\`\`
 
 6. **Start the FastAPI Application**:
 
-```sh
+\`\`\`sh
 uvicorn journalistic_entity_extraction.main:app --reload
-```
+\`\`\`
 
 7. **Access the Application**:
 
-Open your web browser and go to `http://localhost:8000` to access the FastAPI application.
+Open your web browser and go to \`http://localhost:8000\` to access the FastAPI application.
 
 ## Using Sample Data
 
@@ -87,16 +145,16 @@ Open your web browser and go to `http://localhost:8000` to access the FastAPI ap
 
 To download the sample transcript, run the following script:
 
-```sh
+\`\`\`sh
 cd journalistic-entity-extraction/sample_data
 python download_transcript.py
-```
+\`\`\`
 
-This will download the full transcript from the specified URL and save it as `full_transcript.txt`.
+This will download the full transcript from the specified URL and save it as \`full_transcript.txt\`.
 
 ### Sample House Bill PDF
 
-A sample PDF file named `sample_house_bill.pdf` is also provided in the `sample_data` directory.
+A sample PDF file named \`sample_house_bill.pdf\` is also provided in the \`sample_data\` directory.
 
 ### Using the Sample Data
 
@@ -110,8 +168,8 @@ Go to the project creation section and create a new project with a name of your 
 
 3. **Upload Documents**:
 
-- **Transcript**: Upload `sample_data/full_transcript.txt`.
-- **House Bill PDF**: Upload `sample_data/BILLS-118hr5863rfs.pdf`.
+- **Transcript**: Upload \`sample_data/full_transcript.txt\`.
+- **House Bill PDF**: Upload \`sample_data/BILLS-118hr5863rfs.pdf\`.
 
 4. **Extract Entities and Build Knowledge Graph**:
 
@@ -119,25 +177,25 @@ Go to the entity extraction section, select your project, and click on the "Extr
 
 5. **View Knowledge Graph**:
 
-Access Neo4j at `http://localhost:7474` with the default credentials (`neo4j/test`) to visualize the knowledge graph. You can run queries to explore the relationships between the extracted entities.
+Access Neo4j at \`http://localhost:7474\` with the default credentials (\`neo4j/test\`) to visualize the knowledge graph. You can run queries to explore the relationships between the extracted entities.
 
 ## Using RAG with Knowledge Graphs
 
 ### RAG Endpoint
 
-You can use the RAG functionality by sending a POST request to the `/rag/` endpoint with your query. The app will retrieve relevant information from the knowledge graph and use it to generate a response.
+You can use the RAG functionality by sending a POST request to the \`/rag/\` endpoint with your query. The app will retrieve relevant information from the knowledge graph and use it to generate a response.
 
 #### Example Usage
 
-```sh
+\`\`\`sh
 http POST http://localhost:8000/rag/ user_query="Tell me about the environmental bill."
-```
+\`\`\`
 
 This will return a response generated using the retrieved information from the knowledge graph and the language model.
 
 ## Project Structure
 
-```
+\`\`\`
 TEXTGRAPHAI/
 ├── .gitignore
 ├── README.md
@@ -171,7 +229,7 @@ TEXTGRAPHAI/
 │       ├── __init__.py
 │       └── test_main.py
 └── setup_repo.sh
-```
+\`\`\`
 
 ## Future Enhancements
 
@@ -185,3 +243,6 @@ This MVP is designed to be scalable. Future enhancements can include:
 ## License
 
 This project is licensed under the MIT License.
+EOL
+
+echo "Project updated successfully!"
