@@ -1,6 +1,6 @@
-# Journalistic Entity Extraction
+# Generalized Entity Extraction with GraphRAG
 
-This project is a Python package designed to build a knowledge graph from entity extraction of various source documents like transcripts, house bills, PDFs, and other similar documents.
+This project is a Python package designed to build a knowledge graph from entity extraction of various source documents like transcripts, house bills, PDFs, and other similar documents using GraphRAG.
 
 ## Features
 
@@ -10,6 +10,24 @@ This project is a Python package designed to build a knowledge graph from entity
 - Entity Extraction from Documents
 - Knowledge Graph Construction with Neo4j
 - Retrieval-Augmented Generation (RAG) with Knowledge Graphs
+
+## Pre-processing and Annotation
+
+### Pre-process Text Data
+
+To clean and segment your text data, run the pre-processing script:
+
+```sh
+python preprocess.py --input <input_file_or_directory> --output <output_directory> --chunk_size <chunk_size>
+```
+
+### Annotate Text Data with GPT-4
+
+To annotate the pre-processed text data using GPT-4, run the annotation script:
+
+```sh
+python annotate.py --input <input_directory> --output <output_directory>
+```
 
 ## Running the Application
 
@@ -155,13 +173,15 @@ TEXTGRAPHAI/
 │   │       ├── __init__.py
 │   │       ├── entity_extraction.py
 │   │       ├── knowledge_graph.py
+│   │       ├── rag.py
 │   │       ├── retrieval.py
-│   │       └── rag.py
 │   ├── requirements.txt
 │   ├── sample_data/
 │   │   ├── BILLS-118hr5863rfs.pdf
 │   │   ├── download_transcript.py
-│   │   └── full_transcript.txt
+│   │   ├── full_transcript.txt
+│   │   ├── preprocessed/
+│   │   ├── annotated/
 │   ├── setup.py
 │   ├── static/
 │   │   └── main.js

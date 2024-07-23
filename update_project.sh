@@ -1,64 +1,225 @@
 #!/bin/bash
 
-# Create retrieval.py
-cat > journalistic-entity-extraction/journalistic_entity_extraction/services/retrieval.py <<EOL
-from py2neo import Graph
+# Create preprocess.py
+cat > preprocess.py <<EOL
+import os
+import re
+import argparse
 
-def retrieve_relevant_information(graph: Graph, query: str):
-    cypher_query = """
-    MATCH (n)
-    WHERE n.name CONTAINS $query
-    RETURN n
-    """
-    results = graph.run(cypher_query, query=query).data()
-    return results
+def clean_text(text):
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\[.*?\]', '', text)
+    text = text.strip()
+    return text
+
+def chunk_text(text, chunk_size=600):
+    words = text.split()
+    for i in range(0, len(words), chunk_size):
+        yield ' '.join(words[i:i+chunk_size])
+
+def preprocess_file(input_file, output_dir, chunk_size=600):
+    with open(input_file, 'r') as file:
+        text = file.read()
+    
+    cleaned_text = clean_text(text)
+    chunks = list(chunk_text(cleaned_text, chunk_size))
+
+    for i, chunk in enumerate(chunks):
+        with open(f"{output_dir}/{os.path.basename(input_file)}_chunk_{i}.txt", 'w') as chunk_file:
+            chunk_file.write(chunk)
+
+def preprocess_directory(input_dir, output_dir, chunk_size=600):
+    for filename in os.listdir(input_dir):
+        if filename.endswith(".txt"):
+            preprocess_file(os.path.join(input_dir, filename), output_dir, chunk_size)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Preprocess text data.')
+    parser.add_argument('--input', required=True, help='Input file or directory')
+    parser.add_argument('--output', required=True, help='Output directory')
+    parser.add_argument('--chunk_size', type=int, default=600, help='Chunk size for text segmentation')
+    args = parser.parse_args()
+
+    os.makedirs(args.output, exist_ok=True)
+
+    if os.path.isfile(args.input):
+        preprocess_file(args.input, args.output, args.chunk_size)
+    elif os.path.isdir(args.input):
+        preprocess_directory(args.input, args.output, args.chunk_size)
+    else:
+        raise ValueError("Invalid input path. Must be a file or directory.")
 EOL
 
-# Create rag.py
-cat > journalistic-entity-extraction/journalistic_entity_extraction/services/rag.py <<EOL
+# Create annotate.py
+cat > annotate.py <<EOL
 import openai
 import os
-from .retrieval import retrieve_relevant_information
+import argparse
+from dotenv import load_dotenv
 
-def generate_response(graph: Graph, user_query: str):
-    # Retrieve relevant information from the knowledge graph
-    relevant_info = retrieve_relevant_information(graph, user_query)
-    
-    # Convert relevant information to a string format
-    context = " ".join([str(info['n']) for info in relevant_info])
-    
-    # Use OpenAI API to generate a response
+load_dotenv()
+
+def annotate_text(text):
     openai.api_key = os.getenv("OPENAI_API_KEY")
+
     response = openai.Completion.create(
         engine="davinci",
-        prompt=f"Context: {context}\n\nUser Query: {user_query}\n\nResponse:",
-        max_tokens=150
+        prompt=f"Annotate the following text with entities and relationships:\n\n{text}",
+        max_tokens=1000
     )
+
     return response.choices[0].text
+
+def annotate_files(input_dir, output_dir):
+    for filename in os.listdir(input_dir):
+        if filename.endswith(".txt"):
+            with open(os.path.join(input_dir, filename), 'r') as file:
+                text = file.read()
+            
+            annotated_text = annotate_text(text)
+            
+            with open(os.path.join(output_dir, f"annotated_{filename}"), 'w') as output_file:
+                output_file.write(annotated_text)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Annotate text data with GPT-4.')
+    parser.add_argument('--input', required=True, help='Input directory')
+    parser.add_argument('--output', required=True, help='Output directory')
+    args = parser.parse_args()
+
+    os.makedirs(args.output, exist_ok=True)
+    annotate_files(args.input, args.output)
 EOL
 
-# Update main.py to add the new RAG endpoint
-sed -i '' '/from \.schemas import/a\
-from \.services\.rag import generate_response\
-' journalistic-entity-extraction/journalistic_entity_extraction/main.py
+# Create graphrag_integration.py
+cat > graphrag_integration.py <<EOL
+import asyncio
+import os
+from graphrag.index import run_pipeline
+from graphrag.index.config import PipelineCSVInputConfig, PipelineWorkflowReference
+from graphrag.index.input import load_input
+from dotenv import load_dotenv
 
-# Add the new RAG endpoint to main.py
-awk '/def create_project/,/^@app.post/ { print $0 } END { print "@app.post(\"/rag/\")\nasync def rag_endpoint(user_query: str, graph: Graph = Depends(get_neo4j)):\n    response = generate_response(graph, user_query)\n    return {\"response\": response}\n" }' journalistic-entity-extraction/journalistic_entity_extraction/main.py > temp.py && mv temp.py journalistic-entity-extraction/journalistic_entity_extraction/main.py
+load_dotenv()
 
-# Create or update .env file
-cat > journalistic-entity-extraction/.env <<EOL
-OPENAI_API_KEY=your_openai_api_key_here
-DATABASE_URL=postgresql://user:password@localhost:5432/journalistic
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=test
+async def run_graphrag(input_dir):
+    if (
+        "EXAMPLE_OPENAI_API_KEY" not in os.environ
+        and "OPENAI_API_KEY" not in os.environ
+    ):
+        msg = "Please set EXAMPLE_OPENAI_API_KEY or OPENAI_API_KEY environment variable to run this example"
+        raise Exception(msg)
+
+    dataset = await load_input(
+        PipelineCSVInputConfig(
+            file_pattern=".*\\.txt$",
+            base_dir=input_dir,
+            source_column="source",
+            text_column="text",
+            timestamp_column="timestamp",
+            timestamp_format="%Y%m%d%H%M%S",
+            title_column="title",
+        ),
+    )
+
+    workflows = [
+        PipelineWorkflowReference(
+            name="entity_extraction",
+            config={
+                "entity_extract": {
+                    "strategy": {
+                        "type": "graph_intelligence",
+                        "llm": {
+                            "type": "openai_chat",
+                            "api_key": os.environ.get(
+                                "EXAMPLE_OPENAI_API_KEY",
+                                os.environ.get("OPENAI_API_KEY", None),
+                            ),
+                            "model": os.environ.get(
+                                "EXAMPLE_OPENAI_MODEL", "gpt-3.5-turbo"
+                            ),
+                            "max_tokens": os.environ.get(
+                                "EXAMPLE_OPENAI_MAX_TOKENS", 2500
+                            ),
+                            "temperature": os.environ.get(
+                                "EXAMPLE_OPENAI_TEMPERATURE", 0
+                            ),
+                        },
+                    }
+                }
+            },
+        )
+    ]
+
+    tables = []
+    async for table in run_pipeline(dataset=dataset, workflows=workflows):
+        tables.append(table)
+    pipeline_result = tables[-1]
+
+    if pipeline_result.result is not None:
+        print(pipeline_result.result["entities"].to_list())
+    else:
+        print("No results!")
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Run GraphRAG integration.')
+    parser.add_argument('--input', required=True, help='Input directory')
+    args = parser.parse_args()
+
+    asyncio.run(run_graphrag(args.input))
+EOL
+
+# Update main.py to add the new RAG endpoint and upload file functionality
+cat > journalistic-entity-extraction/journalistic_entity_extraction/main.py <<EOL
+from fastapi import FastAPI, Depends, UploadFile, File
+from sqlalchemy.orm import Session
+from . import crud, models, schemas
+from .database import SessionLocal, engine
+from .services.rag import generate_response
+from py2neo import Graph
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+models.Base.metadata.create_all(bind=engine)
+
+app = FastAPI()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_neo4j():
+    graph = Graph(
+        os.getenv("NEO4J_URI", "bolt://neo4j:7687"),
+        auth=(os.getenv("NEO4J_USER", "neo4j"), os.getenv("NEO4J_PASSWORD", "test"))
+    )
+    return graph
+
+@app.post("/rag/")
+async def rag_endpoint(user_query: str, graph: Graph = Depends(get_neo4j)):
+    response = generate_response(graph, user_query)
+    return {"response": response}
+
+@app.post("/upload/")
+async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    file_location = f"files/{file.filename}"
+    with open(file_location, "wb") as f:
+        f.write(file.file.read())
+    return {"info": f"file '{file.filename}' saved at '{file_location}'"}
 EOL
 
 # Update README.md
 cat > README.md <<EOL
-# Journalistic Entity Extraction
+# Generalized Entity Extraction with GraphRAG
 
-This project is a Python package designed to build a knowledge graph from entity extraction of various source documents like transcripts, house bills, PDFs, and other similar documents.
+This project is a Python package designed to build a knowledge graph from entity extraction of various source documents like transcripts, house bills, PDFs, and other similar documents using GraphRAG.
 
 ## Features
 
@@ -68,6 +229,24 @@ This project is a Python package designed to build a knowledge graph from entity
 - Entity Extraction from Documents
 - Knowledge Graph Construction with Neo4j
 - Retrieval-Augmented Generation (RAG) with Knowledge Graphs
+
+## Pre-processing and Annotation
+
+### Pre-process Text Data
+
+To clean and segment your text data, run the pre-processing script:
+
+\`\`\`sh
+python preprocess.py --input <input_file_or_directory> --output <output_directory> --chunk_size <chunk_size>
+\`\`\`
+
+### Annotate Text Data with GPT-4
+
+To annotate the pre-processed text data using GPT-4, run the annotation script:
+
+\`\`\`sh
+python annotate.py --input <input_directory> --output <output_directory>
+\`\`\`
 
 ## Running the Application
 
@@ -213,13 +392,15 @@ TEXTGRAPHAI/
 │   │       ├── __init__.py
 │   │       ├── entity_extraction.py
 │   │       ├── knowledge_graph.py
+│   │       ├── rag.py
 │   │       ├── retrieval.py
-│   │       └── rag.py
 │   ├── requirements.txt
 │   ├── sample_data/
 │   │   ├── BILLS-118hr5863rfs.pdf
 │   │   ├── download_transcript.py
-│   │   └── full_transcript.txt
+│   │   ├── full_transcript.txt
+│   │   ├── preprocessed/
+│   │   ├── annotated/
 │   ├── setup.py
 │   ├── static/
 │   │   └── main.js
