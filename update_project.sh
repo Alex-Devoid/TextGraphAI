@@ -1,429 +1,331 @@
 #!/bin/bash
 
-# Create preprocess.py
-cat > preprocess.py <<EOL
-import os
-import re
-import argparse
+# Define the root directory for the project
+ROOT_DIR="."
 
-def clean_text(text):
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'\[.*?\]', '', text)
-    text = text.strip()
-    return text
+# Create the project directory and subdirectories
+mkdir -p $ROOT_DIR/app/templates
+mkdir -p $ROOT_DIR/app/static
+mkdir -p $ROOT_DIR/app/prompts
+mkdir -p $ROOT_DIR/app/logs
+mkdir -p $ROOT_DIR/uploads
+mkdir -p $ROOT_DIR/output
 
-def chunk_text(text, chunk_size=600):
-    words = text.split()
-    for i in range(0, len(words), chunk_size):
-        yield ' '.join(words[i:i+chunk_size])
+# Create main files and directories
 
-def preprocess_file(input_file, output_dir, chunk_size=600):
-    with open(input_file, 'r') as file:
-        text = file.read()
-    
-    cleaned_text = clean_text(text)
-    chunks = list(chunk_text(cleaned_text, chunk_size))
+# run.py
+cat <<EOL > $ROOT_DIR/run.py
+from app import create_app
 
-    for i, chunk in enumerate(chunks):
-        with open(f"{output_dir}/{os.path.basename(input_file)}_chunk_{i}.txt", 'w') as chunk_file:
-            chunk_file.write(chunk)
-
-def preprocess_directory(input_dir, output_dir, chunk_size=600):
-    for filename in os.listdir(input_dir):
-        if filename.endswith(".txt"):
-            preprocess_file(os.path.join(input_dir, filename), output_dir, chunk_size)
+app = create_app()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Preprocess text data.')
-    parser.add_argument('--input', required=True, help='Input file or directory')
-    parser.add_argument('--output', required=True, help='Output directory')
-    parser.add_argument('--chunk_size', type=int, default=600, help='Chunk size for text segmentation')
-    args = parser.parse_args()
-
-    os.makedirs(args.output, exist_ok=True)
-
-    if os.path.isfile(args.input):
-        preprocess_file(args.input, args.output, args.chunk_size)
-    elif os.path.isdir(args.input):
-        preprocess_directory(args.input, args.output, args.chunk_size)
-    else:
-        raise ValueError("Invalid input path. Must be a file or directory.")
+    app.run(debug=True)
 EOL
 
-# Create annotate.py
-cat > annotate.py <<EOL
-import openai
-import os
-import argparse
-from dotenv import load_dotenv
-
-load_dotenv()
-
-def annotate_text(text):
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-
-    response = openai.Completion.create(
-        engine="davinci",
-        prompt=f"Annotate the following text with entities and relationships:\n\n{text}",
-        max_tokens=1000
-    )
-
-    return response.choices[0].text
-
-def annotate_files(input_dir, output_dir):
-    for filename in os.listdir(input_dir):
-        if filename.endswith(".txt"):
-            with open(os.path.join(input_dir, filename), 'r') as file:
-                text = file.read()
-            
-            annotated_text = annotate_text(text)
-            
-            with open(os.path.join(output_dir, f"annotated_{filename}"), 'w') as output_file:
-                output_file.write(annotated_text)
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Annotate text data with GPT-4.')
-    parser.add_argument('--input', required=True, help='Input directory')
-    parser.add_argument('--output', required=True, help='Output directory')
-    args = parser.parse_args()
-
-    os.makedirs(args.output, exist_ok=True)
-    annotate_files(args.input, args.output)
+# celeryconfig.py
+cat <<EOL > $ROOT_DIR/celeryconfig.py
+broker_url = 'redis://localhost:6379/0'
+result_backend = 'redis://localhost:6379/0'
 EOL
 
-# Create graphrag_integration.py
-cat > graphrag_integration.py <<EOL
-import asyncio
-import os
-from graphrag.index import run_pipeline
-from graphrag.index.config import PipelineCSVInputConfig, PipelineWorkflowReference
-from graphrag.index.input import load_input
-from dotenv import load_dotenv
-
-load_dotenv()
-
-async def run_graphrag(input_dir):
-    if (
-        "EXAMPLE_OPENAI_API_KEY" not in os.environ
-        and "OPENAI_API_KEY" not in os.environ
-    ):
-        msg = "Please set EXAMPLE_OPENAI_API_KEY or OPENAI_API_KEY environment variable to run this example"
-        raise Exception(msg)
-
-    dataset = await load_input(
-        PipelineCSVInputConfig(
-            file_pattern=".*\\.txt$",
-            base_dir=input_dir,
-            source_column="source",
-            text_column="text",
-            timestamp_column="timestamp",
-            timestamp_format="%Y%m%d%H%M%S",
-            title_column="title",
-        ),
-    )
-
-    workflows = [
-        PipelineWorkflowReference(
-            name="entity_extraction",
-            config={
-                "entity_extract": {
-                    "strategy": {
-                        "type": "graph_intelligence",
-                        "llm": {
-                            "type": "openai_chat",
-                            "api_key": os.environ.get(
-                                "EXAMPLE_OPENAI_API_KEY",
-                                os.environ.get("OPENAI_API_KEY", None),
-                            ),
-                            "model": os.environ.get(
-                                "EXAMPLE_OPENAI_MODEL", "gpt-3.5-turbo"
-                            ),
-                            "max_tokens": os.environ.get(
-                                "EXAMPLE_OPENAI_MAX_TOKENS", 2500
-                            ),
-                            "temperature": os.environ.get(
-                                "EXAMPLE_OPENAI_TEMPERATURE", 0
-                            ),
-                        },
-                    }
-                }
-            },
-        )
-    ]
-
-    tables = []
-    async for table in run_pipeline(dataset=dataset, workflows=workflows):
-        tables.append(table)
-    pipeline_result = tables[-1]
-
-    if pipeline_result.result is not None:
-        print(pipeline_result.result["entities"].to_list())
-    else:
-        print("No results!")
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Run GraphRAG integration.')
-    parser.add_argument('--input', required=True, help='Input directory')
-    args = parser.parse_args()
-
-    asyncio.run(run_graphrag(args.input))
+# requirements.txt
+cat <<EOL > $ROOT_DIR/requirements.txt
+Flask
+Celery
+pandas
+graphrag
+redis
 EOL
 
-# Update main.py to add the new RAG endpoint and upload file functionality
-cat > journalistic-entity-extraction/journalistic_entity_extraction/main.py <<EOL
-from fastapi import FastAPI, Depends, UploadFile, File
-from sqlalchemy.orm import Session
-from . import crud, models, schemas
-from .database import SessionLocal, engine
-from .services.rag import generate_response
-from py2neo import Graph
-from dotenv import load_dotenv
-import os
+# README.md
+cat <<EOL > $ROOT_DIR/README.md
+# GraphRAG App
 
-load_dotenv()
+This is a web application that allows users to upload documents and process them using GraphRAG.
 
-models.Base.metadata.create_all(bind=engine)
+## Installation
 
-app = FastAPI()
+1. Clone the repository.
+2. Install dependencies using \`pip install -r requirements.txt\`.
+3. Run the application with \`python run.py\`.
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+## Usage
 
-def get_neo4j():
-    graph = Graph(
-        os.getenv("NEO4J_URI", "bolt://neo4j:7687"),
-        auth=(os.getenv("NEO4J_USER", "neo4j"), os.getenv("NEO4J_PASSWORD", "test"))
-    )
-    return graph
+- Navigate to the web interface and upload your documents.
+- The backend will process and index the documents using GraphRAG.
+- Results can be viewed on the results page.
 
-@app.post("/rag/")
-async def rag_endpoint(user_query: str, graph: Graph = Depends(get_neo4j)):
-    response = generate_response(graph, user_query)
-    return {"response": response}
+## Configuration
 
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    file_location = f"files/{file.filename}"
-    with open(file_location, "wb") as f:
-        f.write(file.file.read())
-    return {"info": f"file '{file.filename}' saved at '{file_location}'"}
-EOL
-
-# Update README.md
-cat > README.md <<EOL
-# Generalized Entity Extraction with GraphRAG
-
-This project is a Python package designed to build a knowledge graph from entity extraction of various source documents like transcripts, house bills, PDFs, and other similar documents using GraphRAG.
-
-## Features
-
-- User Registration and Login
-- Project Management
-- Document Upload
-- Entity Extraction from Documents
-- Knowledge Graph Construction with Neo4j
-- Retrieval-Augmented Generation (RAG) with Knowledge Graphs
-
-## Pre-processing and Annotation
-
-### Pre-process Text Data
-
-To clean and segment your text data, run the pre-processing script:
-
-\`\`\`sh
-python preprocess.py --input <input_file_or_directory> --output <output_directory> --chunk_size <chunk_size>
-\`\`\`
-
-### Annotate Text Data with GPT-4
-
-To annotate the pre-processed text data using GPT-4, run the annotation script:
-
-\`\`\`sh
-python annotate.py --input <input_directory> --output <output_directory>
-\`\`\`
-
-## Running the Application
-
-### Option 1: Using Docker (Recommended)
-
-1. **Navigate to the \`journalistic-entity-extraction\` directory**:
-
-\`\`\`sh
-cd journalistic-entity-extraction
-\`\`\`
-
-2. **Start the Services**:
-
-\`\`\`sh
-docker-compose up --build
-\`\`\`
-
-3. **Access the Application**:
-
-Open your web browser and go to \`http://localhost:8000\` to access the FastAPI application. Neo4j will be accessible at \`http://localhost:7474\` with the default credentials \`neo4j/test\`.
-
-### Option 2: Local Setup
-
-1. **Navigate to the \`journalistic-entity-extraction\` directory**:
-
-\`\`\`sh
-cd journalistic-entity-extraction
-\`\`\`
-
-2. **Install Dependencies**:
-
-\`\`\`sh
-pip install -r requirements.txt
-\`\`\`
-
-3. **Set Up Environment Variables**:
-
-Create a \`.env\` file in the \`journalistic-entity-extraction\` directory with the following content:
-
-\`\`\`plaintext
-DATABASE_URL=postgresql://user:password@localhost:5432/journalistic
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=test
-OPENAI_API_KEY=your_openai_api_key_here
-\`\`\`
-
-4. **Run PostgreSQL and Neo4j Locally**:
-
-Ensure you have PostgreSQL and Neo4j running locally. You can download and install them from their official websites.
-
-5. **Initialize the Database**:
-
-Run the following commands to initialize the PostgreSQL database:
-
-\`\`\`sh
-psql -U user -d journalistic -c "CREATE TABLE users (id SERIAL PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, hashed_password VARCHAR(100) NOT NULL);"
-psql -U user -d journalistic -c "CREATE TABLE projects (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, owner_id INTEGER REFERENCES users(id));"
-psql -U user -d journalistic -c "CREATE TABLE documents (id SERIAL PRIMARY KEY, filename VARCHAR(100) NOT NULL, path VARCHAR(200) NOT NULL, project_id INTEGER REFERENCES projects(id));"
-\`\`\`
-
-6. **Start the FastAPI Application**:
-
-\`\`\`sh
-uvicorn journalistic_entity_extraction.main:app --reload
-\`\`\`
-
-7. **Access the Application**:
-
-Open your web browser and go to \`http://localhost:8000\` to access the FastAPI application.
-
-## Using Sample Data
-
-### Download Sample Data
-
-To download the sample transcript, run the following script:
-
-\`\`\`sh
-cd journalistic-entity-extraction/sample_data
-python download_transcript.py
-\`\`\`
-
-This will download the full transcript from the specified URL and save it as \`full_transcript.txt\`.
-
-### Sample House Bill PDF
-
-A sample PDF file named \`sample_house_bill.pdf\` is also provided in the \`sample_data\` directory.
-
-### Using the Sample Data
-
-1. **Register a New User**:
-
-Go to the registration section in the web interface and create a new user.
-
-2. **Create a New Project**:
-
-Go to the project creation section and create a new project with a name of your choice.
-
-3. **Upload Documents**:
-
-- **Transcript**: Upload \`sample_data/full_transcript.txt\`.
-- **House Bill PDF**: Upload \`sample_data/BILLS-118hr5863rfs.pdf\`.
-
-4. **Extract Entities and Build Knowledge Graph**:
-
-Go to the entity extraction section, select your project, and click on the "Extract" button. The application will process the documents, extract entities, and build a knowledge graph.
-
-5. **View Knowledge Graph**:
-
-Access Neo4j at \`http://localhost:7474\` with the default credentials (\`neo4j/test\`) to visualize the knowledge graph. You can run queries to explore the relationships between the extracted entities.
-
-## Using RAG with Knowledge Graphs
-
-### RAG Endpoint
-
-You can use the RAG functionality by sending a POST request to the \`/rag/\` endpoint with your query. The app will retrieve relevant information from the knowledge graph and use it to generate a response.
-
-#### Example Usage
-
-\`\`\`sh
-http POST http://localhost:8000/rag/ user_query="Tell me about the environmental bill."
-\`\`\`
-
-This will return a response generated using the retrieved information from the knowledge graph and the language model.
-
-## Project Structure
-
-\`\`\`
-TEXTGRAPHAI/
-├── .gitignore
-├── README.md
-├── journalistic-entity-extraction/
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── journalistic_entity_extraction/
-│   │   ├── __init__.py
-│   │   ├── crud.py
-│   │   ├── database.py
-│   │   ├── main.py
-│   │   ├── models.py
-│   │   ├── schemas.py
-│   │   └── services/
-│   │       ├── __init__.py
-│   │       ├── entity_extraction.py
-│   │       ├── knowledge_graph.py
-│   │       ├── rag.py
-│   │       ├── retrieval.py
-│   ├── requirements.txt
-│   ├── sample_data/
-│   │   ├── BILLS-118hr5863rfs.pdf
-│   │   ├── download_transcript.py
-│   │   ├── full_transcript.txt
-│   │   ├── preprocessed/
-│   │   ├── annotated/
-│   ├── setup.py
-│   ├── static/
-│   │   └── main.js
-│   ├── templates/
-│   │   └── index.html
-│   └── tests/
-│       ├── __init__.py
-│       └── test_main.py
-└── setup_repo.sh
-\`\`\`
-
-## Future Enhancements
-
-This MVP is designed to be scalable. Future enhancements can include:
-
-- Advanced entity extraction using machine learning models
-- Visualization tools for the knowledge graph
-- Integration with external data sources
-- User roles and permissions management
+- Update \`app/settings.yaml\` with your specific settings.
 
 ## License
 
-This project is licensed under the MIT License.
+MIT
 EOL
 
-echo "Project updated successfully!"
+# app/__init__.py
+cat <<EOL > $ROOT_DIR/app/__init__.py
+from flask import Flask
+from app.routes import main as main_blueprint
+from celery import Celery
+
+def create_app():
+    app = Flask(__name__)
+    app.config['UPLOAD_FOLDER'] = 'uploads'
+    app.config['CELERY_BROKER_URL'] = 'redis://localhost:6379/0'
+    app.config['CELERY_RESULT_BACKEND'] = 'redis://localhost:6379/0'
+    app.register_blueprint(main_blueprint)
+    return app
+
+def create_celery_app(app=None):
+    app = app or create_app()
+    celery = Celery(app.import_name, broker=app.config['CELERY_BROKER_URL'])
+    celery.conf.update(app.config)
+    celery.autodiscover_tasks(['app.tasks'])
+    return celery
+EOL
+
+# app/routes.py
+cat <<EOL > $ROOT_DIR/app/routes.py
+from flask import Blueprint, render_template, request, redirect, url_for
+from app.tasks import process_file
+import os
+
+main = Blueprint('main', __name__)
+
+@main.route('/')
+def upload_form():
+    return render_template('upload.html')
+
+@main.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return redirect(request.url)
+    file = request.files['file']
+    if file.filename == '':
+        return redirect(request.url)
+    if file:
+        file_path = os.path.join('uploads', file.filename)
+        file.save(file_path)
+        process_file.delay(file_path)
+        return redirect(url_for('main.upload_form'))
+
+@main.route('/results/<filename>')
+def results(filename):
+    # Placeholder for displaying results
+    return f'Results for {filename}'
+EOL
+
+# app/tasks.py
+cat <<EOL > $ROOT_DIR/app/tasks.py
+from celery import Celery
+from graphrag.index import PipelineConfig, run_pipeline_with_config
+from graphrag.index.progress import RichProgressReporter
+import pandas as pd
+import os
+import time
+import logging
+import asyncio
+import signal
+
+celery = Celery('tasks', broker='pyamqp://guest@localhost//')
+
+def _enable_logging(root_dir, run_id, verbose):
+    logging_file = os.path.join(root_dir, 'logs', f'{run_id}-indexing-engine.log')
+    os.makedirs(os.path.dirname(logging_file), exist_ok=True)
+    logging.basicConfig(
+        filename=logging_file,
+        filemode='a',
+        format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+        datefmt='%H:%M:%S',
+        level=logging.DEBUG if verbose else logging.INFO,
+    )
+
+def _create_default_config(root, config_path, verbose, dryrun, progress_reporter):
+    # Example function to create or load a configuration
+    if config_path and os.path.exists(config_path):
+        # Load configuration from file
+        with open(config_path, 'r') as f:
+            config_data = f.read()
+        # Assume create_graphrag_config is a function to parse the config
+        return create_graphrag_config(config_data, root)
+    else:
+        # Return default configuration
+        return PipelineConfig()
+
+@celery.task
+def process_file(file_path):
+    root = 'app'  # Define your root path
+    run_id = time.strftime("%Y%m%d-%H%M%S")
+    _enable_logging(root, run_id, verbose=True)
+    progress_reporter = RichProgressReporter("GraphRAG Indexer")
+
+    # Create or load the pipeline configuration
+    pipeline_config = _create_default_config(
+        root, config_path=os.path.join(root, 'settings.yaml'), verbose=True, dryrun=False, progress_reporter=progress_reporter
+    )
+    cache = None  # Define caching strategy if needed
+
+    async def execute():
+        encountered_errors = False
+        async for output in run_pipeline_with_config(
+            pipeline_config,
+            run_id=run_id,
+            memory_profile=False,
+            cache=cache,
+            progress_reporter=progress_reporter,
+        ):
+            if output.errors:
+                encountered_errors = True
+                progress_reporter.error(output.workflow)
+            else:
+                progress_reporter.success(output.workflow)
+            progress_reporter.info(str(output.result))
+
+        if encountered_errors:
+            progress_reporter.error("Errors occurred during the pipeline run, see logs for more details.")
+        else:
+            progress_reporter.success("All workflows completed successfully.")
+
+    def handle_signal(signum, frame):
+        logging.info(f"Received signal {signum}, exiting...")
+        for task in asyncio.all_tasks():
+            task.cancel()
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+    asyncio.run(execute())
+EOL
+
+# app/utils.py
+cat <<EOL > $ROOT_DIR/app/utils.py
+# Utility functions can be added here
+EOL
+
+# app/templates/upload.html
+cat <<EOL > $ROOT_DIR/app/templates/upload.html
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload File</title>
+</head>
+<body>
+    <h1>Upload File</h1>
+    <form method="post" enctype="multipart/form-data" action="/upload">
+        <input type="file" name="file">
+        <input type="submit" value="Upload">
+    </form>
+</body>
+</html>
+EOL
+
+# app/settings.yaml
+cat <<EOL > $ROOT_DIR/app/settings.yaml
+# settings.yaml example
+api_key: "YOUR_API_KEY"
+# Add other necessary settings
+EOL
+
+# app/prompts/claim_extraction.txt
+cat <<EOL > $ROOT_DIR/app/prompts/claim_extraction.txt
+# Content for claim extraction prompt
+EOL
+
+# app/prompts/community_report.txt
+cat <<EOL > $ROOT_DIR/app/prompts/community_report.txt
+# Content for community report prompt
+EOL
+
+# app/prompts/entity_extraction.txt
+cat <<EOL > $ROOT_DIR/app/prompts/entity_extraction.txt
+# Content for entity extraction prompt
+EOL
+
+# app/prompts/summarize_descriptions.txt
+cat <<EOL > $ROOT_DIR/app/prompts/summarize_descriptions.txt
+# Content for summarize descriptions prompt
+EOL
+
+# Dockerfile for Flask app
+cat <<EOL > $ROOT_DIR/Dockerfile
+# Use an official Python runtime as a parent image
+FROM python:3.9-slim
+
+# Set the working directory in the container
+WORKDIR /usr/src/app
+
+# Copy the current directory contents into the container
+COPY . .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Make port 5000 available to the world outside this container
+EXPOSE 5000
+
+# Define environment variable
+ENV FLASK_APP=run.py
+
+# Run the command to start the Flask server
+CMD ["flask", "run", "--host=0.0.0.0"]
+EOL
+
+# Dockerfile for Celery worker
+cat <<EOL > $ROOT_DIR/Dockerfile.celery
+# Use the same base image as the Flask app for consistency
+FROM python:3.9-slim
+
+# Set the working directory in the container
+WORKDIR /usr/src/app
+
+# Copy the current directory contents into the container
+COPY . .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Define the Celery worker entry point
+CMD ["celery", "-A", "app.tasks", "worker", "--loglevel=info"]
+EOL
+
+# docker-compose.yml
+cat <<EOL > $ROOT_DIR/docker-compose.yml
+version: '3'
+services:
+  flask-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/usr/src/app
+    depends_on:
+      - redis
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/usr/src/app
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+EOL
+
+echo "Project structure and files created successfully!"

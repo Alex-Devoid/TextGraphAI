@@ -1,0 +1,14 @@
+# Use the same base image as the Flask app for consistency
+FROM python:3.9-slim
+
+# Set the working directory in the container
+WORKDIR /usr/src/app
+
+# Copy the current directory contents into the container
+COPY . .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Define the Celery worker entry point
+CMD ["celery", "-A", "app.tasks", "worker", "--loglevel=info"]
