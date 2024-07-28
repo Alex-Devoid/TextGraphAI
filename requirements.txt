@@ -3,3 +3,4 @@ Celery
 pandas
 graphrag
 redis
+py2neo

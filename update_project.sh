@@ -2,6 +2,8 @@
 
 # Define the root directory for the project
 ROOT_DIR="."
+PARQUET_DIR="$ROOT_DIR/inputs/artifacts"
+CSV_DIR="$ROOT_DIR/neo4j-import"
 
 # Create the project directory and subdirectories
 mkdir -p $ROOT_DIR/app/templates
@@ -10,6 +12,8 @@ mkdir -p $ROOT_DIR/app/prompts
 mkdir -p $ROOT_DIR/app/logs
 mkdir -p $ROOT_DIR/uploads
 mkdir -p $ROOT_DIR/output
+mkdir -p $PARQUET_DIR
+mkdir -p $CSV_DIR
 
 # Create main files and directories
 
@@ -36,6 +40,7 @@ Celery
 pandas
 graphrag
 redis
+py2neo
 EOL
 
 # README.md
@@ -129,6 +134,7 @@ import time
 import logging
 import asyncio
 import signal
+from py2neo import Graph
 
 celery = Celery('tasks', broker='pyamqp://guest@localhost//')
 
@@ -198,6 +204,44 @@ def process_file(file_path):
     signal.signal(signal.SIGTERM, handle_signal)
 
     asyncio.run(execute())
+
+    # Convert Parquet to CSV and import into Neo4j
+    convert_parquet_to_csv_and_import_to_neo4j()
+
+def convert_parquet_to_csv_and_import_to_neo4j():
+    # Parquet to CSV conversion
+    parquet_dir = '$PARQUET_DIR'
+    csv_dir = '$CSV_DIR'
+
+    def clean_quotes(value):
+        if isinstance(value, str):
+            value = value.strip().replace('""', '"').replace('"', '')
+            if ',' in value or '"' in value:
+                value = f'"{value}"'
+        return value
+
+    for file_name in os.listdir(parquet_dir):
+        if file_name.endswith('.parquet'):
+            parquet_file = os.path.join(parquet_dir, file_name)
+            csv_file = os.path.join(csv_dir, file_name.replace('.parquet', '.csv'))
+
+            df = pd.read_parquet(parquet_file)
+            for column in df.select_dtypes(include=['object']).columns:
+                df[column] = df[column].apply(clean_quotes)
+
+            df.to_csv(csv_file, index=False, quoting=csv.QUOTE_NONNUMERIC)
+            print(f"Converted {parquet_file} to {csv_file} successfully.")
+
+    print("All Parquet files have been converted to CSV.")
+
+    # Import CSVs into Neo4j
+    graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))  # Update with your Neo4j credentials
+
+    # Load CSV and create nodes and relationships
+    graph.run("""
+    // Add the Cypher commands from your provided script here
+    """)
+
 EOL
 
 # app/utils.py
@@ -230,25 +274,6 @@ api_key: "YOUR_API_KEY"
 # Add other necessary settings
 EOL
 
-# app/prompts/claim_extraction.txt
-cat <<EOL > $ROOT_DIR/app/prompts/claim_extraction.txt
-# Content for claim extraction prompt
-EOL
-
-# app/prompts/community_report.txt
-cat <<EOL > $ROOT_DIR/app/prompts/community_report.txt
-# Content for community report prompt
-EOL
-
-# app/prompts/entity_extraction.txt
-cat <<EOL > $ROOT_DIR/app/prompts/entity_extraction.txt
-# Content for entity extraction prompt
-EOL
-
-# app/prompts/summarize_descriptions.txt
-cat <<EOL > $ROOT_DIR/app/prompts/summarize_descriptions.txt
-# Content for summarize descriptions prompt
-EOL
 
 # Dockerfile for Flask app
 cat <<EOL > $ROOT_DIR/Dockerfile
@@ -309,6 +334,7 @@ services:
       - .:/usr/src/app
     depends_on:
       - redis
+      - neo4j
 
   celery-worker:
     build:
@@ -321,11 +347,22 @@ services:
       - .:/usr/src/app
     depends_on:
       - redis
+      - neo4j
 
   redis:
     image: redis:latest
     ports:
       - "6379:6379"
+
+  neo4j:
+    image: neo4j:latest
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    volumes:
+      - ./neo4j-import:/var/lib/neo4j/import
 EOL
 
 echo "Project structure and files created successfully!"

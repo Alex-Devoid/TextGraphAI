@@ -7,6 +7,7 @@ import time
 import logging
 import asyncio
 import signal
+from py2neo import Graph
 
 celery = Celery('tasks', broker='pyamqp://guest@localhost//')
 
@@ -76,3 +77,41 @@ def process_file(file_path):
     signal.signal(signal.SIGTERM, handle_signal)
 
     asyncio.run(execute())
+
+    # Convert Parquet to CSV and import into Neo4j
+    convert_parquet_to_csv_and_import_to_neo4j()
+
+def convert_parquet_to_csv_and_import_to_neo4j():
+    # Parquet to CSV conversion
+    parquet_dir = './inputs/artifacts'
+    csv_dir = './neo4j-import'
+
+    def clean_quotes(value):
+        if isinstance(value, str):
+            value = value.strip().replace('""', '"').replace('"', '')
+            if ',' in value or '"' in value:
+                value = f'"{value}"'
+        return value
+
+    for file_name in os.listdir(parquet_dir):
+        if file_name.endswith('.parquet'):
+            parquet_file = os.path.join(parquet_dir, file_name)
+            csv_file = os.path.join(csv_dir, file_name.replace('.parquet', '.csv'))
+
+            df = pd.read_parquet(parquet_file)
+            for column in df.select_dtypes(include=['object']).columns:
+                df[column] = df[column].apply(clean_quotes)
+
+            df.to_csv(csv_file, index=False, quoting=csv.QUOTE_NONNUMERIC)
+            print(f"Converted {parquet_file} to {csv_file} successfully.")
+
+    print("All Parquet files have been converted to CSV.")
+
+    # Import CSVs into Neo4j
+    graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))  # Update with your Neo4j credentials
+
+    # Load CSV and create nodes and relationships
+    graph.run("""
+    // Add the Cypher commands from your provided script here
+    """)
+

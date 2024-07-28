@@ -13,6 +13,7 @@ services:
       - .:/usr/src/app
     depends_on:
       - redis
+      - neo4j
 
   celery-worker:
     build:
@@ -25,8 +26,19 @@ services:
       - .:/usr/src/app
     depends_on:
       - redis
+      - neo4j
 
   redis:
     image: redis:latest
     ports:
       - "6379:6379"
+
+  neo4j:
+    image: neo4j:latest
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    volumes:
+      - ./neo4j-import:/var/lib/neo4j/import
