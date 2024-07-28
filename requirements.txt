@@ -1,0 +1,15 @@
+requests
+beautifulsoup4
+pymupdf
+spacy
+neo4j
+click
+langchain
+langchain-openai
+graphrag
+psycopg2-binary
+python-dotenv
+tiktoken
+graphdatascience
+openai
+graphistry[bolt]
