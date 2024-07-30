@@ -1,5 +1,5 @@
 import logging
-
+from pydantic import BaseModel
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -59,13 +59,14 @@ def _create_default_config(root, config_path, verbose, dryrun, progress_reporter
     if verbose or dryrun:
         progress_reporter.info(f"Using default configuration: {redacted_parameters}")
     result = create_pipeline_config(parameters, verbose)
-    redacted_result = redact(result.model_dump())  # Redact and serialize to dict
+    redacted_result = redact(result)  # Redact and serialize to dict or JSON
     if verbose or dryrun:
         progress_reporter.info(f"Final Config: {redacted_result}")
     if dryrun:
         progress_reporter.info("dry run complete, exiting...")
         sys.exit(0)
     return result
+
 
 def _read_config_parameters(root, config, reporter):
     root_path = Path(root)
@@ -171,15 +172,17 @@ def convert_parquet_to_csv_and_import_to_neo4j():
     // Add the Cypher commands from your provided script here
     """)
 
-def redact(input: dict) -> str:
-    """Sanitize the config json."""
+def redact(input_data: dict | BaseModel) -> str:
+    """Sanitize the config JSON."""
+    if isinstance(input_data, BaseModel):
+        input_data = input_data.dict()  # Convert Pydantic model to dict
 
-    def redact_dict(input: dict) -> dict:
-        if not isinstance(input, dict):
-            return input
+    def redact_dict(input_dict: dict) -> dict:
+        if not isinstance(input_dict, dict):
+            return input_dict
 
         result = {}
-        for key, value in input.items():
+        for key, value in input_dict.items():
             if key in {
                 "api_key",
                 "connection_string",
@@ -196,7 +199,7 @@ def redact(input: dict) -> str:
                 result[key] = value
         return result
 
-    redacted_dict = redact_dict(input)
+    redacted_dict = redact_dict(input_data)
     return json.dumps(redacted_dict, indent=4)
 
 def create_graphrag_config(data, root):
