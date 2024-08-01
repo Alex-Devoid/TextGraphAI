@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for
-from app.tasks import process_file
+from app.tasks import process_file, trigger_neo4j_import
 import os
 
 main = Blueprint('main', __name__)
@@ -21,7 +21,11 @@ def upload_file():
         process_file.delay(file_path)
         return redirect(url_for('main.upload_form'))
 
+@main.route('/trigger_neo4j_import', methods=['POST'])
+def trigger_neo4j_import_route():
+    trigger_neo4j_import.delay()
+    return redirect(url_for('main.upload_form'))
+
 @main.route('/results/<filename>')
 def results(filename):
-    # Placeholder for displaying results
     return f'Results for {filename}'

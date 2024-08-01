@@ -1,94 +1,43 @@
 import logging
+import os
+import subprocess
 from pydantic import BaseModel
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger(__name__)
-
 from celery import Celery
 from graphrag.index import PipelineConfig, create_pipeline_config, run_pipeline_with_config
 from graphrag.index.progress.rich import RichProgressReporter
-from graphrag.index.progress import (
-    NullProgressReporter,
-    PrintProgressReporter,
-    ProgressReporter,
-)
+from graphrag.index.progress import NullProgressReporter, PrintProgressReporter, ProgressReporter
 from graphrag.index.cache import NoopPipelineCache
 import pandas as pd
-import os
 import time
-import logging
 import asyncio
 import signal
-from py2neo import Graph
 from pathlib import Path
 import json
 import yaml
+from dotenv import load_dotenv
+from py2neo import Graph
+import csv
+
+# Load environment variables from .env file
+env_path = os.path.join(os.path.dirname(__file__), '..', '.env')  # Adjust this path as needed
+load_dotenv(dotenv_path=env_path)
 
 celery = Celery('tasks', broker='pyamqp://guest@localhost//')
 
-
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-
-def _enable_logging(root_dir, run_id, verbose):
-    logging_file = os.path.join(root_dir, 'logs', f'{run_id}-indexing-engine.log')
-    os.makedirs(os.path.dirname(logging_file), exist_ok=True)
-    logging.basicConfig(
-        filename=logging_file,
-        filemode='a',
-        format='%(asctime)s,%(msecs)d %(name)s %(levellevel)s %(message)s',
-        datefmt='%H:%M:%S',
-        level=logging.DEBUG if verbose else logging.INFO,
-    )
-
-def _get_progress_reporter(reporter_type: str | None):
-    if reporter_type is None or reporter_type == "rich":
-        return RichProgressReporter("GraphRAG Indexer ")
-    if reporter_type == "print":
-        return PrintProgressReporter("GraphRAG Indexer ")
-    if reporter_type == "none":
-        return NullProgressReporter()
-    raise ValueError(f"Invalid progress reporter type: {reporter_type}")
-
-def _create_default_config(root, config_path, verbose, dryrun, progress_reporter):
-    # Create or load configuration
-    parameters = _read_config_parameters(root, config_path, progress_reporter)
-    redacted_parameters = redact(parameters)  # Redact sensitive information
-    log.info("using default configuration: %s", redacted_parameters)
-    if verbose or dryrun:
-        progress_reporter.info(f"Using default configuration: {redacted_parameters}")
-    result = create_pipeline_config(parameters, verbose)
-    redacted_result = redact(result)  # Redact and serialize to dict or JSON
-    if verbose or dryrun:
-        progress_reporter.info(f"Final Config: {redacted_result}")
-    if dryrun:
-        progress_reporter.info("dry run complete, exiting...")
-        sys.exit(0)
-    return result
-
-
-def _read_config_parameters(root, config, reporter):
-    root_path = Path(root)
-    settings_yaml = Path(config) if config and Path(config).suffix in [".yaml", ".yml"] else root_path / "settings.yaml"
-    if not settings_yaml.exists():
-        settings_yaml = root_path / "settings.yml"
-    settings_json = Path(config) if config and Path(config).suffix == ".json" else root_path / "settings.json"
-
-    if settings_yaml.exists():
-        reporter.success(f"Reading settings from {settings_yaml}")
-        with settings_yaml.open("r", encoding="utf-8") as file:
-            data = yaml.safe_load(file)
-            return create_graphrag_config(data, root)[0]  # Return the PipelineConfig object
-
-    if settings_json.exists():
-        reporter.success(f"Reading settings from {settings_json}")
-        with settings_json.open("r", encoding="utf-8") as file:
-            data = json.load(file)
-            return create_graphrag_config(data, root)[0]  # Return the PipelineConfig object
-
-    reporter.success("Reading settings from environment variables")
-    return create_graphrag_config({}, root)[0]
+def run_command(command):
+    """Run a system command and log the output."""
+    try:
+        result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        log.info(result.stdout.decode())
+        log.error(result.stderr.decode())  # Use .error for stderr to distinguish error outputs
+    except subprocess.CalledProcessError as e:
+        log.error(f"Command failed: {e}")
+        log.error(e.stdout.decode())
+        log.error(e.stderr.decode())
 
 @celery.task
 def process_file(file_path):
@@ -97,80 +46,117 @@ def process_file(file_path):
     _enable_logging(root, run_id, verbose=True)
     progress_reporter = _get_progress_reporter("rich")
 
-    # Create or load the pipeline configuration
-    pipeline_config = _create_default_config(
-        root, config_path=os.path.join(root, 'settings.yaml'), verbose=True, dryrun=False, progress_reporter=progress_reporter
-    )
-    cache = NoopPipelineCache()  # No caching in this example
+    # Check if GraphRAG has already been initialized
+    settings_path = os.path.join(root, 'settings.yaml')
+    prompts_dir = os.path.join(root, 'prompts')
 
-    async def execute():
-        encountered_errors = False
-        async for output in run_pipeline_with_config(
-            pipeline_config,
-            run_id=run_id,
-            memory_profile=False,
-            cache=cache,
-            progress_reporter=progress_reporter,
-        ):
-            if output.errors:
-                encountered_errors = True
-                progress_reporter.error(output.workflow)
-            else:
-                progress_reporter.success(output.workflow)
-            progress_reporter.info(str(output.result))
+    def is_initialized():
+        if not os.path.exists(prompts_dir) or not any(os.path.isfile(os.path.join(prompts_dir, f)) for f in os.listdir(prompts_dir)):
+            return False
+        return True
 
-        if encountered_errors:
-            progress_reporter.error("Errors occurred during the pipeline run, see logs for more details.")
-        else:
-            progress_reporter.success("All workflows completed successfully.")
+    if not is_initialized():
+        log.info("Initializing GraphRAG...")
+        init_command = f"python -m graphrag.index --init --root {root}"
+        run_command(init_command)
+    else:
+        log.info("GraphRAG already initialized. Skipping initialization.")
 
-    def handle_signal(signum, frame):
-        logging.info(f"Received signal {signum}, exiting...")
-        for task in asyncio.all_tasks():
-            task.cancel()
-
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGTERM, handle_signal)
-
-    asyncio.run(execute())
+    # Run indexing
+    index_command = f"python -m graphrag.index --root {root}"
+    run_command(index_command)
 
     # Convert Parquet to CSV and import into Neo4j
     convert_parquet_to_csv_and_import_to_neo4j()
 
+def import_csv_to_neo4j(graph, csv_file, node_label, unique_id_field):
+    
+    csv_filename = os.path.basename(csv_file)
+    query = f"""
+    LOAD CSV WITH HEADERS FROM 'file:///var/lib/neo4j/import/{csv_filename}' AS row
+    MERGE (n:{node_label} {{{unique_id_field}: row.{unique_id_field}}})
+    SET n += row
+    """
+    try:
+        log.debug(f"Executing Cypher query: {query}")
+        graph.run(query)
+        log.info(f"Successfully imported data from {csv_file} into {node_label} nodes.")
+    except Exception as e:
+        log.error(f"Failed to import data from {csv_file}: {e}")
+        log.debug(f"Error details: {str(e)}")
+
+
+
+@celery.task
+def trigger_neo4j_import():
+    convert_parquet_to_csv_and_import_to_neo4j()
 
 def convert_parquet_to_csv_and_import_to_neo4j():
-    # Parquet to CSV conversion
-    parquet_dir = './inputs/artifacts'
-    csv_dir = './neo4j-import'
+    base_output_dir = './app/output'
+    csv_dir = '/neo4j-import'  # This should be the mounted volume path
+    graph = Graph("bolt://neo4j:7687", auth=("neo4j", "password"))
 
-    def clean_quotes(value):
-        if isinstance(value, str):
-            value = value.strip().replace('""', '"').replace('"', '')
-            if ',' in value or '"' in value:
-                value = f'"{value}"'
-        return value
+    # Find the latest output directory by timestamp
+    try:
+        latest_dir = max([os.path.join(base_output_dir, d) for d in os.listdir(base_output_dir)], key=os.path.getmtime)
+        parquet_dir = os.path.join(latest_dir, 'artifacts')
+    except ValueError:
+        log.error(f"No output directories found in {base_output_dir}")
+        return
+
+    log.info(f"Processing Parquet files from {parquet_dir}")
+
+    # Check if there are any Parquet files
+    if not os.path.exists(parquet_dir):
+        log.error(f"Parquet directory {parquet_dir} does not exist.")
+        return
 
     for file_name in os.listdir(parquet_dir):
         if file_name.endswith('.parquet'):
             parquet_file = os.path.join(parquet_dir, file_name)
             csv_file = os.path.join(csv_dir, file_name.replace('.parquet', '.csv'))
 
-            df = pd.read_parquet(parquet_file)
-            for column in df.select_dtypes(include=['object']).columns:
-                df[column] = df[column].apply(clean_quotes)
+            # Log the file paths being processed
+            log.info(f"Processing Parquet file: {parquet_file}")
+            log.info(f"Output CSV file: {csv_file}")
 
-            df.to_csv(csv_file, index=False, quoting=csv.QUOTE_NONNUMERIC)
-            print(f"Converted {parquet_file} to {csv_file} successfully.")
+            try:
+                df = pd.read_parquet(parquet_file)
+                df.to_csv(csv_file, index=False, quoting=csv.QUOTE_NONNUMERIC)
+                log.info(f"Converted {parquet_file} to {csv_file} successfully.")
+            except Exception as e:
+                log.error(f"Error processing {parquet_file}: {e}")
 
-    print("All Parquet files have been converted to CSV.")
+            # Import to Neo4j for all CSV files
+            log.info(f"Importing {csv_file} into Neo4j with node label 'Data'")
+            import_csv_to_neo4j(graph, csv_file, 'Data', 'id')
 
-    # Import CSVs into Neo4j
-    graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))  # Update with your Neo4j credentials
+    # Log the contents of the CSV directory
+    try:
+        log.info(f"Contents of {csv_dir} after conversion: {os.listdir(csv_dir)}")
+    except FileNotFoundError as e:
+        log.error(f"CSV directory not found: {e}")
 
-    # Load CSV and create nodes and relationships
-    graph.run("""
-    // Add the Cypher commands from your provided script here
-    """)
+
+def _enable_logging(root_dir, run_id, verbose):
+    logging_file = os.path.join(root_dir, 'logs', f'{run_id}-indexing-engine.log')
+    os.makedirs(os.path.dirname(logging_file), exist_ok=True)
+    logging.basicConfig(
+        filename=logging_file,
+        filemode='a',
+        format='%(asctime)s,%(msecs)d %(name)s %(level)s %(message)s',
+        datefmt='%H:%M:%S',
+        level=logging.DEBUG if verbose else logging.INFO,
+    )
+
+def _get_progress_reporter(reporter_type: str | None):
+    if reporter_type is None or reporter_type == "rich":
+        return RichProgressReporter("GraphRAG Indexer ")
+    if reporter_type is "print":
+        return PrintProgressReporter("GraphRAG Indexer ")
+    if reporter_type is "none":
+        return NullProgressReporter()
+    raise ValueError(f"Invalid progress reporter type: {reporter_type}")
 
 def redact(input_data: dict | BaseModel) -> str:
     """Sanitize the config JSON."""

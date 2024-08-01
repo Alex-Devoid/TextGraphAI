@@ -4,3 +4,6 @@ pandas
 graphrag
 redis
 py2neo
+python-dotenv
+fastparquet
+pyarrow
