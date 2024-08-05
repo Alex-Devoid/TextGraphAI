@@ -34,8 +34,12 @@ Ensure you have Docker and Docker Compose installed.
    ```
 
    - Ensure your system has enough disk space to avoid issues with Neo4j.
+   - Make sure the following ports are available:
+        -- 5001: For the Flask application.
+        -- 7474: For the Neo4j web interface.
+        -- 7687: For the Neo4j Bolt protocol.
+        -- 6379: For Redis.
 
-4. The Flask app will be available at [http://localhost:5001](http://localhost:5001).
 
 ## Uploading Documents
 
@@ -46,7 +50,9 @@ To upload a document:
 3. (Optional) Select `uploads/transcriptLC68920.txt` to test tool with a transcript of a U.S. Senrtate hearing.
 4. Click the upload button to submit the file for processing.
 5. Extraction prompts will automatically be fine tuned based on the text you uplaoded.
-6. Keep an eye on GraphRAG extraction status at with `docker-compose logs -f celery-worker` 
+6. GraphRAG indexing status is currently not visible in `docker-compose logs -f celery-worker`, but will notify you when indexing finishes after several miniets. 
+- `Settings.yaml`is confinuged to use OpenAI models `gpt-4o-mini` and `text-embedding-3-small`.
+
 
 ## Viewing Neo4j Database
 
