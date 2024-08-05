@@ -1,6 +1,0 @@
-graphrag
-Flask
-Celery
-redis
-py2neo
-python-dotenv

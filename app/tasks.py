@@ -85,8 +85,8 @@ def process_file(file_path):
         # Create GraphRAG config
         # pipeline_config, pipeline_config_dict, pipeline_config_json = create_graphrag_config(settings_data, root)
         # log.debug(f"PipelineConfig: {pipeline_config_json}")
-        prompt_tune = f"python -m graphrag.prompt_tune --root {root}"
-        run_command(prompt_tune)
+        # prompt_tune = f"python -m graphrag.prompt_tune --root {root}"
+        # run_command(prompt_tune)
         # Run indexing
         index_command = f"python -m graphrag.index --verbose --root {root}"
         run_command(index_command)
