@@ -39,7 +39,7 @@ Ensure you have Docker and Docker Compose installed.
 To upload a document:
 
 1. Open your web browser and navigate to [http://localhost:5001](http://localhost:5001).
-2. Use the upload form to select a file, specify a dataset name, and choose whether to create a new dataset or add to an existing one.
+2. Use the upload form to select a file.
 3. (Optional) Select `uploads/transcriptLC68920.txt` to test tool with a transcript of a U.S. Senrtate hearing.
 4. Click the upload button to submit the file for processing.
 5. Extraction prompts will automatically be fine tuned based on the text you uplaoded.
