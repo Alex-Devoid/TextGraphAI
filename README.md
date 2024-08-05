@@ -109,7 +109,7 @@ docker exec -it textgraphai-celery-worker-1 python -m graphrag.query --root app 
 
 output:
 ```
-UCCESS: Global Search Response: # Key Themes in the Transcript
+SUCCESS: Global Search Response: # Key Themes in the Transcript
 
 The analysis of the dataset reveals several prominent themes that are critical to understanding the current landscape of environmental management, energy efficiency, and water resource management. Below are the top themes identified:
 
