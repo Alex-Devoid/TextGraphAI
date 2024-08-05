@@ -14,3 +14,4 @@ app/cache/entity_extraction
 app/cache/summarize_descriptions
 app/cache/text_embedding
 app/output
+app/input
