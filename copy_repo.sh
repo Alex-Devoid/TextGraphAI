@@ -12,10 +12,10 @@ files=(
 # "/Users/alexdevoid/Documents/TextGraphAI/docker-compose.yml"
 # "/Users/alexdevoid/Documents/TextGraphAI/Dockerfile.celery"
 # "/Users/alexdevoid/Documents/TextGraphAI/run.py"
-"/Users/alexdevoid/Documents/TextGraphAI/app/prompts/claim_extraction.txt"
-"/Users/alexdevoid/Documents/TextGraphAI/app/prompts/community_report.txt"
-"/Users/alexdevoid/Documents/TextGraphAI/app/prompts/entity_extraction.txt"
-"/Users/alexdevoid/Documents/TextGraphAI/app/prompts/summarize_descriptions.txt"
+# /Users/alexdevoid/Documents/TextGraphAI/app/output/20240802-020954/reports/indexing-engine.log
+# /Users/alexdevoid/Documents/TextGraphAI/app/output/20240802-020954/reports/logs.json
+/Users/alexdevoid/Documents/TextGraphAI/app/tasks.py
+/Users/alexdevoid/Documents/TextGraphAI/app/settings.yaml
 
 )
 

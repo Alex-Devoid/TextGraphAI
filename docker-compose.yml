@@ -4,12 +4,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "5001:5000"
     environment:
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
       - GRAPHRAG_API_KEY=${GRAPHRAG_API_KEY}
+    ports:
+      - "5001:5000"
+
     volumes:
       - .:/usr/src/app
       - neo4j-import:/neo4j-import
@@ -20,7 +21,7 @@ services:
   celery-worker:
     build:
       context: .
-      dockerfile: Dockerfile.celery
+      dockerfile: Dockerfile.celery  
     environment:
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
@@ -34,17 +35,19 @@ services:
 
   neo4j:
     image: neo4j:latest
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_dbms_security_allow__csv__import__from__file__urls=true    
     ports:
       - "7474:7474"
       - "7687:7687"
-    environment:
-      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
-      - NEO4J_dbms_security_allow__csv__import__from__file__urls=true
     volumes:
       - neo4j-import:/var/lib/neo4j/import
 
   redis:
     image: redis:latest
+    env_file:
+      - app/.env
     ports:
       - "6379:6379"
 

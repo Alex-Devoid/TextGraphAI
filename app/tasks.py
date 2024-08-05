@@ -88,7 +88,7 @@ def process_file(file_path):
         prompt_tune = f"python -m graphrag.prompt_tune --root {root}"
         run_command(prompt_tune)
         # Run indexing
-        index_command = f"python -m graphrag.index --root {root}"
+        index_command = f"python -m graphrag.index --verbose --root {root}"
         run_command(index_command)
 
         # Convert Parquet to CSV and import into Neo4j

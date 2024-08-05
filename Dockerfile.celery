@@ -1,5 +1,5 @@
 # Use the same base image as the Flask app for consistency
-FROM python:3.10-slim
+FROM python:3.10.14
 
 # Set the working directory in the container
 WORKDIR /usr/src/app
