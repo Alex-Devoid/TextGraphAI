@@ -7,5 +7,9 @@ venv/
 *.sqlite3
 .DS_Store
 setup_repo.sh
-.env
 app/.env
+app/cache/claim_extraction
+app/cache/community_reporting
+app/cache/entity_extraction
+app/cache/summarize_descriptions
+app/cache/text_embedding
