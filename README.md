@@ -24,7 +24,7 @@ Ensure you have Docker and Docker Compose installed.
 
    - `CELERY_BROKER_URL`: URL for the Celery message broker (Redis).
    - `CELERY_RESULT_BACKEND`: URL for the Celery result backend (Redis).
-   - `GRAPHRAG_API_KEY`: API key for GraphRAG.
+   - `GRAPHRAG_API_KEY`: LLM API key for GraphRAG, for example your OpenAI Key.
    - `NEO4J_PASSWORD`: Password for the Neo4j database.
 
 3. **Build and start the Docker containers:**
