@@ -106,7 +106,7 @@ RETURN n, r, m
 ```
 docker exec -it textgraphai-celery-worker-1 python -m graphrag.query --root app --method global "What are the top themes in this transcript?"
 ```
-(You may see some error )
+
 output:
 ```
 UCCESS: Global Search Response: # Key Themes in the Transcript
